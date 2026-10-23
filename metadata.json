@@ -1,0 +1,6 @@
+{
+  "name": "Loanskart Smart EMI Calculator",
+  "description": "Loanskart Smart EMI Calculator - Calculate monthly loan payments, interest rates, and early prepayment savings with tenure and EMI reduction analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
