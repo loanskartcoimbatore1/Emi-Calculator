@@ -1,23 +1,1465 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Loanskart Smart EMI Calculator</title>
-    <meta name="description" content="Loanskart Smart EMI Calculator - Calculate monthly loan payments, interest rates, and early prepayment savings with tenure and EMI reduction analysis." />
-    <meta property="og:title" content="Loanskart Smart EMI Calculator" />
-    <meta property="og:description" content="Loanskart Smart EMI Calculator - Calculate monthly loan payments, interest rates, and early prepayment savings with tenure and EMI reduction analysis." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  </head>
-  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500/20 selection:text-indigo-900 min-h-screen">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loanskart Smart EMI Calculator</title>
+  <meta name="description" content="Loanskart Smart EMI Calculator - Calculate monthly loan payments, interest rates, and early prepayment savings with tenure and EMI reduction analysis." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace']
+          },
+          screens: {
+            'xs': '480px'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    input[type="range"] {
+      touch-action: pan-y;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      cursor: pointer;
+      -webkit-appearance: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    @media (max-width: 640px) {
+      input[type="range"]::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+      }
+    }
+  </style>
+
+  <!-- React & Babel Standalone CDNs -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500/20 selection:text-indigo-900 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // --- Currency Configurations ---
+    const CURRENCIES = {
+      INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', locale: 'en-IN' },
+      USD: { code: 'USD', symbol: '$', name: 'US Dollar', locale: 'en-US' },
+      EUR: { code: 'EUR', symbol: '€', name: 'Euro', locale: 'de-DE' },
+      GBP: { code: 'GBP', symbol: '£', name: 'British Pound', locale: 'en-GB' },
+      CAD: { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar', locale: 'en-CA' },
+      AUD: { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', locale: 'en-AU' },
+      SGD: { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar', locale: 'en-SG' },
+      AED: { code: 'AED', symbol: 'AED', name: 'UAE Dirham', locale: 'en-AE' },
+    };
+
+    function formatCurrency(amount, currency = 'INR') {
+      if (isNaN(amount) || amount === null || amount === undefined) return '₹0';
+      const config = CURRENCIES[currency] || CURRENCIES.INR;
+      try {
+        return new Intl.NumberFormat(config.locale, {
+          style: 'currency',
+          currency: config.code,
+          maximumFractionDigits: 0,
+          minimumFractionDigits: 0,
+        }).format(Math.round(amount));
+      } catch {
+        return `${config.symbol}${Math.round(amount).toLocaleString()}`;
+      }
+    }
+
+    function formatCompactNumber(amount, currency = 'INR') {
+      const config = CURRENCIES[currency] || CURRENCIES.INR;
+      if (currency === 'INR') {
+        if (amount >= 10000000) return `${config.symbol}${(amount / 10000000).toFixed(2)} Cr`;
+        if (amount >= 100000) return `${config.symbol}${(amount / 100000).toFixed(2)} L`;
+        if (amount >= 1000) return `${config.symbol}${(amount / 1000).toFixed(1)} k`;
+        return `${config.symbol}${Math.round(amount)}`;
+      }
+      if (amount >= 1000000) return `${config.symbol}${(amount / 1000000).toFixed(2)}M`;
+      if (amount >= 1000) return `${config.symbol}${(amount / 1000).toFixed(1)}k`;
+      return `${config.symbol}${Math.round(amount)}`;
+    }
+
+    function calculateStandardEmi(principal, annualRate, totalMonths) {
+      if (principal <= 0 || totalMonths <= 0) return 0;
+      if (annualRate <= 0) return principal / totalMonths;
+      const monthlyRate = annualRate / 12 / 100;
+      const factor = Math.pow(1 + monthlyRate, totalMonths);
+      const emi = (principal * monthlyRate * factor) / (factor - 1);
+      return isFinite(emi) ? emi : 0;
+    }
+
+    function parseDate(dateStr) {
+      const [yearStr, monthStr] = (dateStr || '').split('-');
+      const year = parseInt(yearStr, 10) || new Date().getFullYear();
+      const month = (parseInt(monthStr, 10) || 1) - 1;
+      return new Date(year, month, 1);
+    }
+
+    function formatMonthYear(date) {
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    }
+
+    function addMonths(date, months) {
+      const d = new Date(date);
+      d.setMonth(d.getMonth() + months);
+      return d;
+    }
+
+    // --- Calculation Engine with All Prepayment Segments ---
+    function computeLoanAmortization(input, prepayment) {
+      const totalMonths = Math.max(1, input.tenureYears * 12 + input.tenureMonths);
+      const principal = Math.max(1, input.principal);
+      const annualRate = Math.max(0, input.annualRate);
+      const monthlyRate = annualRate / 12 / 100;
+      const startDate = parseDate(input.startDate);
+
+      const baseEmi = calculateStandardEmi(principal, annualRate, totalMonths);
+      let baseBalance = principal;
+      let baseCumulativeInterest = 0;
+      let baseCumulativePrincipal = 0;
+      const originalSchedule = [];
+
+      for (let m = 1; m <= totalMonths; m++) {
+        const opening = baseBalance;
+        const interest = monthlyRate > 0 ? opening * monthlyRate : 0;
+        let scheduledPrincipal = baseEmi - interest;
+        if (scheduledPrincipal > opening || m === totalMonths) {
+          scheduledPrincipal = opening;
+        }
+        const scheduledPayment = scheduledPrincipal + interest;
+        baseBalance = Math.max(0, opening - scheduledPrincipal);
+        baseCumulativeInterest += interest;
+        baseCumulativePrincipal += scheduledPrincipal;
+        const monthDate = addMonths(startDate, m - 1);
+
+        originalSchedule.push({
+          monthIndex: m,
+          dateStr: formatMonthYear(monthDate),
+          year: monthDate.getFullYear(),
+          monthInYear: monthDate.getMonth() + 1,
+          openingBalance: opening,
+          scheduledEmi: scheduledPayment,
+          principal: scheduledPrincipal,
+          interest: interest,
+          extraPrepayment: 0,
+          totalPayment: scheduledPayment,
+          closingBalance: baseBalance,
+          cumulativePrincipal: baseCumulativePrincipal,
+          cumulativeInterest: baseCumulativeInterest,
+          cumulativePrepayment: 0,
+          loanRemainingPercent: principal > 0 ? (baseBalance / principal) * 100 : 0,
+        });
+        if (baseBalance <= 0) break;
+      }
+
+      const originalTotalInterest = baseCumulativeInterest;
+      const originalTotalPayment = principal + originalTotalInterest;
+      const originalPayoffDate = formatMonthYear(addMonths(startDate, totalMonths - 1));
+
+      // Prepayment Simulation
+      let prepayBalance = principal;
+      let prepayCumulativeInterest = 0;
+      let prepayCumulativePrincipal = 0;
+      let totalPrepaymentMade = 0;
+      const prepaySchedule = [];
+      let currentEmi = baseEmi;
+      const maxIterations = totalMonths * 2;
+      let m = 1;
+
+      while (prepayBalance > 0.01 && m <= maxIterations) {
+        const opening = prepayBalance;
+        const monthDate = addMonths(startDate, m - 1);
+        const monthInYear = monthDate.getMonth() + 1;
+        const interest = monthlyRate > 0 ? opening * monthlyRate : 0;
+
+        let extraPrepay = 0;
+        if (prepayment.enabled) {
+          if (prepayment.recurringMonthlyEnabled && m >= (prepayment.recurringStartMonth || 1)) {
+            extraPrepay += Math.max(0, prepayment.recurringMonthlyAmount);
+          }
+          if (prepayment.recurringQuarterlyEnabled) {
+            const qStart = prepayment.recurringQuarterlyStartMonth || 3;
+            if (m >= qStart && (m - qStart) % 3 === 0) {
+              extraPrepay += Math.max(0, prepayment.recurringQuarterlyAmount);
+            }
+          }
+          if (prepayment.recurringHalfYearlyEnabled) {
+            const hStart = prepayment.recurringHalfYearlyStartMonth || 6;
+            if (m >= hStart && (m - hStart) % 6 === 0) {
+              extraPrepay += Math.max(0, prepayment.recurringHalfYearlyAmount);
+            }
+          }
+          if (prepayment.recurringYearlyEnabled && m >= 12 && m % 12 === 0) {
+            extraPrepay += Math.max(0, prepayment.recurringYearlyAmount);
+          }
+          if (prepayment.oneTimeEnabled && prepayment.oneTimeMonth === m) {
+            extraPrepay += Math.max(0, prepayment.oneTimeAmount);
+          }
+          if (prepayment.customPayments && prepayment.customPayments.length > 0) {
+            for (const cp of prepayment.customPayments) {
+              if (cp.month === m) extraPrepay += Math.max(0, cp.amount);
+            }
+          }
+        }
+
+        let scheduledPrincipal = Math.max(0, currentEmi - interest);
+        if (scheduledPrincipal > opening) scheduledPrincipal = opening;
+
+        const remainingBeforePrepay = Math.max(0, opening - scheduledPrincipal);
+        if (extraPrepay > remainingBeforePrepay) extraPrepay = remainingBeforePrepay;
+
+        const totalPrincipal = scheduledPrincipal + extraPrepay;
+        const closing = Math.max(0, opening - totalPrincipal);
+        const scheduledPayment = scheduledPrincipal + interest;
+        const totalMonthPayment = scheduledPayment + extraPrepay;
+
+        prepayBalance = closing;
+        prepayCumulativeInterest += interest;
+        prepayCumulativePrincipal += totalPrincipal;
+        totalPrepaymentMade += extraPrepay;
+
+        prepaySchedule.push({
+          monthIndex: m,
+          dateStr: formatMonthYear(monthDate),
+          year: monthDate.getFullYear(),
+          monthInYear: monthInYear,
+          openingBalance: opening,
+          scheduledEmi: scheduledPayment,
+          principal: totalPrincipal,
+          interest: interest,
+          extraPrepayment: extraPrepay,
+          totalPayment: totalMonthPayment,
+          closingBalance: closing,
+          cumulativePrincipal: prepayCumulativePrincipal,
+          cumulativeInterest: prepayCumulativeInterest,
+          cumulativePrepayment: totalPrepaymentMade,
+          loanRemainingPercent: principal > 0 ? (closing / principal) * 100 : 0,
+        });
+
+        if (closing <= 0.01) break;
+
+        if (prepayment.enabled && prepayment.strategy === 'reduce-emi' && extraPrepay > 0) {
+          const remainingTenure = totalMonths - m;
+          if (remainingTenure > 0) {
+            currentEmi = calculateStandardEmi(closing, annualRate, remainingTenure);
+          }
+        }
+        m++;
+      }
+
+      const revisedTenureMonths = prepaySchedule.length;
+      const revisedTotalInterest = prepayCumulativeInterest;
+      const revisedTotalPayment = principal + revisedTotalInterest;
+      const interestSaved = Math.max(0, originalTotalInterest - revisedTotalInterest);
+      const timeSavedMonths = Math.max(0, totalMonths - revisedTenureMonths);
+      const timeSavedYears = Math.floor(timeSavedMonths / 12);
+      const remainingMonthsPart = timeSavedMonths % 12;
+      const revisedPayoffDate = prepaySchedule.length > 0 ? prepaySchedule[prepaySchedule.length - 1].dateStr : originalPayoffDate;
+      const percentageInterestSaved = originalTotalInterest > 0 ? (interestSaved / originalTotalInterest) * 100 : 0;
+      const savingsRatio = totalPrepaymentMade > 0 ? interestSaved / totalPrepaymentMade : 0;
+
+      const yearlyMap = new Map();
+      for (const row of prepaySchedule) {
+        if (!yearlyMap.has(row.year)) yearlyMap.set(row.year, []);
+        yearlyMap.get(row.year).push(row);
+      }
+
+      const yearlySchedule = [];
+      let yearIdx = 1;
+      yearlyMap.forEach((months, calendarYear) => {
+        yearlySchedule.push({
+          yearIndex: yearIdx++,
+          calendarYear,
+          openingBalance: months[0].openingBalance,
+          totalScheduledEmi: months.reduce((acc, r) => acc + r.scheduledEmi, 0),
+          principalPaid: months.reduce((acc, r) => acc + r.principal, 0),
+          interestPaid: months.reduce((acc, r) => acc + r.interest, 0),
+          extraPrepayment: months.reduce((acc, r) => acc + r.extraPrepayment, 0),
+          totalPayment: months.reduce((acc, r) => acc + r.totalPayment, 0),
+          closingBalance: months[months.length - 1].closingBalance,
+          months,
+        });
+      });
+
+      return {
+        summary: {
+          originalMonthlyEmi: baseEmi,
+          originalTotalInterest,
+          originalTotalPayment,
+          originalTenureMonths: totalMonths,
+          originalPayoffDate,
+          withPrepaymentEmi: currentEmi,
+          revisedTotalInterest,
+          revisedTotalPayment,
+          totalPrepaymentMade,
+          revisedTenureMonths,
+          revisedPayoffDate,
+          interestSaved,
+          timeSavedMonths,
+          timeSavedYears,
+          remainingMonthsPart,
+          percentageInterestSaved,
+          savingsRatio,
+        },
+        originalSchedule,
+        prepaymentSchedule: prepaySchedule,
+        yearlySchedule,
+      };
+    }
+
+    function calculateRateSensitivity(principal, baseRate, tenureMonths) {
+      const deltas = [-2.0, -1.5, -1.0, -0.5, 0, 0.5, 1.0, 1.5, 2.0];
+      const baseEmi = calculateStandardEmi(principal, baseRate, tenureMonths);
+      return deltas.map((delta) => {
+        const rate = Math.max(0.1, +(baseRate + delta).toFixed(2));
+        const emi = calculateStandardEmi(principal, rate, tenureMonths);
+        const totalInterest = Math.max(0, emi * tenureMonths - principal);
+        return {
+          rateDelta: delta,
+          rate,
+          monthlyEmi: emi,
+          totalInterest,
+          totalPayment: principal + totalInterest,
+          emiDifference: emi - baseEmi,
+        };
+      }).filter((item, idx, arr) => arr.findIndex((x) => x.rate === item.rate) === idx);
+    }
+
+    function exportScheduleToCsv(schedule, loanName = 'Loan_Amortization_Schedule') {
+      const headers = [
+        'Month #', 'Date', 'Opening Balance', 'Scheduled EMI', 'Principal Paid',
+        'Interest Paid', 'Extra Prepayment', 'Total Paid', 'Closing Balance',
+        'Cumulative Principal', 'Cumulative Interest', 'Remaining Balance %'
+      ];
+      const rows = schedule.map((r) => [
+        r.monthIndex, r.dateStr, r.openingBalance.toFixed(2), r.scheduledEmi.toFixed(2),
+        r.principal.toFixed(2), r.interest.toFixed(2), r.extraPrepayment.toFixed(2),
+        r.totalPayment.toFixed(2), r.closingBalance.toFixed(2), r.cumulativePrincipal.toFixed(2),
+        r.cumulativeInterest.toFixed(2), r.loanRemainingPercent.toFixed(1) + '%'
+      ]);
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `${loanName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // --- Embedded Clean SVG Icons ---
+    const Icon = ({ name, className = "w-4 h-4" }) => {
+      switch(name) {
+        case 'landmark':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M3 10h18M5 10v11M9 10v11M15 10v11M19 10v11M12 2L2 7h20L12 2z" /></svg>;
+        case 'bookmark':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>;
+        case 'download':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
+        case 'home':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>;
+        case 'car':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM5 17H3v-4l2-5h12l2 5v4h-2m-8 0h4" /></svg>;
+        case 'user':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>;
+        case 'education':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zM12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>;
+        case 'sliders':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>;
+        case 'calendar':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
+        case 'zap':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+        case 'clock':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        case 'sparkles':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>;
+        case 'check':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>;
+        case 'trending-down':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>;
+        case 'arrow-down-right':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>;
+        case 'close':
+          return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>;
+        default:
+          return null;
+      }
+    };
+
+    // --- Header Component ---
+    function Header({ activeTab, setActiveTab, currency, setCurrency, savedCount, onOpenSaved, onExportCsv }) {
+      return (
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-2 sm:gap-4 md:gap-8 h-14 sm:h-16">
+              <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 min-w-0">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <Icon name="landmark" className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+                <a href="#" className="text-base sm:text-lg lg:text-xl font-bold tracking-tight text-slate-900 truncate">
+                  <span>Loanskart</span> <span className="font-semibold text-indigo-600 hidden xs:inline sm:inline">Smart EMI</span> <span className="font-semibold text-indigo-600 hidden md:inline">Calculator</span>
+                </a>
+              </div>
+
+              <nav className="hidden md:flex items-center gap-6 lg:gap-7 text-sm font-medium text-slate-600">
+                {['calculator', 'amortization', 'sensitivity', 'compare'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`transition-colors whitespace-nowrap py-1 relative capitalize ${
+                      activeTab === tab ? 'text-indigo-600 font-semibold' : 'hover:text-slate-900'
+                    }`}
+                  >
+                    {tab === 'calculator' ? 'Loan & Prepayment' : tab === 'amortization' ? 'Amortization Schedule' : tab === 'sensitivity' ? 'Rate Stress Test' : 'Loan Comparison'}
+                    {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                <select
+                  value={currency}
+                  aria-label="Currency"
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="h-8 sm:h-9 px-2 sm:px-2.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  {Object.keys(CURRENCIES).map((c) => (
+                    <option key={c} value={c}>{c} ({CURRENCIES[c].symbol})</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={onOpenSaved}
+                  className="h-8 sm:h-9 flex items-center gap-1 px-2 sm:px-3 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors whitespace-nowrap"
+                  title="Saved Plans"
+                >
+                  <Icon name="bookmark" className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                  <span className="hidden xs:inline sm:inline">Saved</span>
+                  <span className="font-mono text-[11px] font-bold text-slate-900 bg-white/80 px-1 rounded">{savedCount}</span>
+                </button>
+
+                <button
+                  onClick={onExportCsv}
+                  className="h-8 sm:h-9 flex items-center gap-1 px-2.5 sm:px-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-xs whitespace-nowrap"
+                >
+                  <Icon name="download" className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="md:hidden flex items-center gap-1 py-1 overflow-x-auto border-t border-slate-100 no-scrollbar">
+              {[
+                { id: 'calculator', label: 'Loan & Prepay' },
+                { id: 'amortization', label: 'Amortization' },
+                { id: 'sensitivity', label: 'Rate Sensitivity' },
+                { id: 'compare', label: 'Compare Loans' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`min-h-[40px] px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-colors shrink-0 ${
+                    activeTab === tab.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // --- Loan Input Section ---
+    function LoanInputSection({ input, onChange, currency }) {
+      const currencySymbol = CURRENCIES[currency]?.symbol || '₹';
+      const maxPrincipal = currency === 'INR' ? Math.max(20000000, input.principal * 1.5) : Math.max(1500000, input.principal * 1.5);
+
+      const presets = [
+        { type: 'home', label: 'Home Loan', icon: 'home' },
+        { type: 'car', label: 'Auto Loan', icon: 'car' },
+        { type: 'personal', label: 'Personal', icon: 'user' },
+        { type: 'education', label: 'Education', icon: 'education' },
+        { type: 'custom', label: 'Custom', icon: 'sliders' },
+      ];
+
+      const applyPreset = (type) => {
+        if (type === 'home') {
+          onChange({ ...input, loanType: 'home', principal: currency === 'INR' ? 4000000 : 350000, annualRate: currency === 'INR' ? 8.5 : 6.75, tenureYears: 20, tenureMonths: 0 });
+        } else if (type === 'car') {
+          onChange({ ...input, loanType: 'car', principal: currency === 'INR' ? 1000000 : 35000, annualRate: currency === 'INR' ? 9.2 : 6.25, tenureYears: 5, tenureMonths: 0 });
+        } else if (type === 'personal') {
+          onChange({ ...input, loanType: 'personal', principal: currency === 'INR' ? 300000 : 15000, annualRate: currency === 'INR' ? 12.5 : 10.99, tenureYears: 3, tenureMonths: 0 });
+        } else if (type === 'education') {
+          onChange({ ...input, loanType: 'education', principal: currency === 'INR' ? 1500000 : 50000, annualRate: currency === 'INR' ? 9.5 : 5.8, tenureYears: 10, tenureMonths: 0 });
+        } else {
+          onChange({ ...input, loanType: 'custom' });
+        }
+      };
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Loan Parameters</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Specify principal amount, interest rate, and term duration</p>
+            </div>
+            <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-lg border border-slate-200/60 overflow-x-auto no-scrollbar sm:flex-wrap">
+              {presets.map((preset) => (
+                <button
+                  key={preset.type}
+                  type="button"
+                  onClick={() => applyPreset(preset.type)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[34px] text-xs font-medium rounded-md transition-all whitespace-nowrap shrink-0 sm:shrink ${
+                    input.loanType === preset.type ? 'bg-white text-indigo-700 shadow-xs border border-indigo-100 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+                  }`}
+                >
+                  <Icon name={preset.icon} className="w-3.5 h-3.5" />
+                  <span>{preset.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-5 sm:space-y-6 pt-4 sm:pt-5">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-600">Loan Amount</label>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <button type="button" onClick={() => onChange({ ...input, principal: Math.max(1000, input.principal + (currency === 'INR' ? 100000 : 10000)) })} className="min-h-[30px] px-2.5 py-1 rounded-md text-slate-600 bg-slate-100 hover:bg-slate-200 font-medium">+{currency === 'INR' ? '1 Lakh' : '10k'}</button>
+                  <button type="button" onClick={() => onChange({ ...input, principal: Math.max(1000, input.principal + (currency === 'INR' ? 500000 : 50000)) })} className="min-h-[30px] px-2.5 py-1 rounded-md text-slate-600 bg-slate-100 hover:bg-slate-200 font-medium">+{currency === 'INR' ? '5 Lakh' : '50k'}</button>
+                </div>
+              </div>
+              <div className="relative rounded-lg shadow-xs">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                  <span className="text-slate-500 font-bold text-base sm:text-lg">{currencySymbol}</span>
+                </div>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={input.principal || ''}
+                  onChange={(e) => onChange({ ...input, principal: Math.max(0, Number(e.target.value)) })}
+                  className="block w-full rounded-lg border border-slate-300 pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 text-lg sm:text-xl font-bold text-slate-900 font-mono tabular-nums focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20"
+                />
+              </div>
+              <div className="mt-3">
+                <div className="py-1">
+                  <input
+                    type="range"
+                    min="5000"
+                    max={maxPrincipal}
+                    step="5000"
+                    value={input.principal}
+                    onChange={(e) => onChange({ ...input, principal: Number(e.target.value) })}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-slate-500 font-mono tabular-nums mt-1">
+                  <span>{formatCurrency(5000, currency)}</span>
+                  <span className="font-semibold text-slate-700">{formatCurrency(input.principal, currency)}</span>
+                  <span>{formatCurrency(maxPrincipal, currency)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-600">Interest Rate (% p.a.)</label>
+                  <span className="text-xs font-mono font-semibold text-indigo-700">{input.annualRate.toFixed(2)}% / yr</span>
+                </div>
+                <div className="relative rounded-lg shadow-xs">
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="30"
+                    step="0.05"
+                    value={input.annualRate || ''}
+                    onChange={(e) => onChange({ ...input, annualRate: Number(e.target.value) })}
+                    className="block w-full rounded-lg border border-slate-300 pl-3.5 pr-8 py-2.5 text-base font-semibold text-slate-900 font-mono tabular-nums focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20"
+                  />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                    <span className="text-slate-400 font-medium text-xs">%</span>
+                  </div>
+                </div>
+                <div className="mt-2.5">
+                  <div className="py-1">
+                    <input
+                      type="range"
+                      min="1"
+                      max="25"
+                      step="0.1"
+                      value={input.annualRate}
+                      onChange={(e) => onChange({ ...input, annualRate: Number(e.target.value) })}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-500 font-mono tabular-nums mt-1">
+                    <span>1%</span><span>12%</span><span>25%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-600">Loan Tenure</label>
+                  <span className="text-xs font-mono font-semibold text-indigo-700">{input.tenureYears * 12 + input.tenureMonths} Mos</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="relative rounded-lg shadow-xs">
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      value={input.tenureYears}
+                      onChange={(e) => onChange({ ...input, tenureYears: Math.max(1, Number(e.target.value)) })}
+                      className="block w-full rounded-lg border border-slate-300 pl-3 pr-11 py-2.5 text-base font-semibold text-slate-900 font-mono tabular-nums focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20"
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
+                      <span className="text-slate-500 text-xs font-medium">Yrs</span>
+                    </div>
+                  </div>
+                  <div className="relative rounded-lg shadow-xs">
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      value={input.tenureMonths}
+                      onChange={(e) => onChange({ ...input, tenureMonths: Math.max(0, Math.min(11, Number(e.target.value))) })}
+                      className="block w-full rounded-lg border border-slate-300 pl-3 pr-11 py-2.5 text-base font-semibold text-slate-900 font-mono tabular-nums focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20"
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
+                      <span className="text-slate-500 text-xs font-medium">Mos</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2.5">
+                  <div className="py-1">
+                    <input
+                      type="range"
+                      min="1"
+                      max="30"
+                      step="1"
+                      value={input.tenureYears}
+                      onChange={(e) => onChange({ ...input, tenureYears: Number(e.target.value) })}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-500 font-mono tabular-nums mt-1">
+                    <span>1 Year</span><span>15 Years</span><span>30 Years</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2 text-slate-600">
+                <Icon name="calendar" className="w-4 h-4 text-slate-500 shrink-0" />
+                <span className="font-medium">Loan Start Month / First EMI:</span>
+              </div>
+              <input
+                type="month"
+                value={input.startDate}
+                onChange={(e) => onChange({ ...input, startDate: e.target.value })}
+                className="w-full sm:w-auto px-3 py-2 rounded-lg border border-slate-300 text-slate-700 font-mono text-xs focus:ring-2 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Prepayment Manager with Monthly, Quarterly, Half-Yearly, Yearly Segments ---
+    function PrepaymentManager({ prepayment, onChange, currency, totalLoanMonths, startDateStr, interestSaved, timeSavedMonths, newPayoffDate, originalPayoffDate, totalPrepaymentMade }) {
+      const currencySymbol = CURRENCIES[currency]?.symbol || '₹';
+      const [activeSegment, setActiveSegment] = useState(prepayment.activeFrequency || 'monthly');
+      const startDate = parseDate(startDateStr);
+
+      const segments = [
+        { id: 'monthly', label: 'Monthly', subLabel: 'Every Month', isEnabled: prepayment.recurringMonthlyEnabled },
+        { id: 'quarterly', label: 'Quarterly', subLabel: 'Every 3 Mos', isEnabled: prepayment.recurringQuarterlyEnabled },
+        { id: 'half-yearly', label: 'Half-Yearly', subLabel: 'Every 6 Mos', isEnabled: prepayment.recurringHalfYearlyEnabled },
+        { id: 'yearly', label: 'Yearly', subLabel: 'Annual (12M)', isEnabled: prepayment.recurringYearlyEnabled },
+        { id: 'one-time', label: 'One-Time', subLabel: 'Lump Sum', isEnabled: prepayment.oneTimeEnabled },
+        { id: 'custom', label: 'Custom', subLabel: 'Milestones', isEnabled: (prepayment.customPayments || []).length > 0 },
+      ];
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shrink-0">
+                <Icon name="zap" className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">Prepayment Simulator</h2>
+                  {prepayment.enabled && <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Active</span>}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">Simulate Monthly, Quarterly, Half-Yearly, and Annual early payments</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onChange({ ...prepayment, enabled: !prepayment.enabled })}
+              className={`min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${
+                prepayment.enabled ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+              }`}
+            >
+              {prepayment.enabled ? 'Disable Prepayment' : 'Enable Prepayment'}
+            </button>
+          </div>
+
+          {prepayment.enabled && (
+            <div className="mt-5 space-y-6">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 block mb-2">Prepayment Impact Strategy</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...prepayment, strategy: 'reduce-tenure' })}
+                    className={`p-3.5 sm:p-4 rounded-xl border text-left transition-all ${
+                      prepayment.strategy === 'reduce-tenure' ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600/20' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <Icon name="clock" className="w-4 h-4 text-indigo-600" />
+                        <span className="text-xs font-bold text-slate-900">Reduce Loan Tenure (Recommended)</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-indigo-200">Max Savings</span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">Keep regular EMI constant and finish the loan years ahead of schedule.</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onChange({ ...prepayment, strategy: 'reduce-emi' })}
+                    className={`p-3.5 sm:p-4 rounded-xl border text-left transition-all ${
+                      prepayment.strategy === 'reduce-emi' ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600/20' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <Icon name="trending-down" className="w-4 h-4 text-indigo-600" />
+                        <span className="text-xs font-bold text-slate-900">Reduce Monthly EMI</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">Lower EMI</span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">Keep original maturity date and lower subsequent monthly installments immediately.</p>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 block mb-2">Prepayment Frequency Segments</label>
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60 overflow-x-auto no-scrollbar sm:grid sm:grid-cols-6">
+                  {segments.map((seg) => (
+                    <button
+                      key={seg.id}
+                      type="button"
+                      onClick={() => { setActiveSegment(seg.id); onChange({ ...prepayment, activeFrequency: seg.id }); }}
+                      className={`flex flex-col items-center justify-center py-2 px-2.5 rounded-lg text-xs transition-all shrink-0 sm:shrink min-w-[85px] sm:min-w-0 min-h-[44px] ${
+                        activeSegment === seg.id ? 'bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="whitespace-nowrap">{seg.label}</span>
+                        {seg.isEnabled && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">{seg.subLabel}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200/80">
+                {activeSegment === 'monthly' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                        <input type="checkbox" checked={prepayment.recurringMonthlyEnabled} onChange={(e) => onChange({ ...prepayment, recurringMonthlyEnabled: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded" />
+                        Monthly Prepayment (Extra Every Month)
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Extra Monthly Amount</label>
+                        <div className="relative rounded-lg shadow-xs">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">{currencySymbol}</span>
+                          <input type="number" step="100" value={prepayment.recurringMonthlyAmount || ''} onChange={(e) => onChange({ ...prepayment, recurringMonthlyEnabled: true, recurringMonthlyAmount: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2.5 text-base font-semibold font-mono bg-white" placeholder="250" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Start Month</label>
+                        <select value={prepayment.recurringStartMonth || 1} onChange={(e) => onChange({ ...prepayment, recurringStartMonth: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white font-mono">
+                          {Array.from({ length: 24 }, (_, i) => i + 1).map((m) => (
+                            <option key={m} value={m}>Month {m} ({formatMonthYear(addMonths(startDate, m - 1))})</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeSegment === 'quarterly' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                        <input type="checkbox" checked={prepayment.recurringQuarterlyEnabled} onChange={(e) => onChange({ ...prepayment, recurringQuarterlyEnabled: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded" />
+                        Quarterly Prepayment (Every 3 Months)
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Quarterly Amount</label>
+                        <div className="relative rounded-lg shadow-xs">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">{currencySymbol}</span>
+                          <input type="number" step="500" value={prepayment.recurringQuarterlyAmount || ''} onChange={(e) => onChange({ ...prepayment, recurringQuarterlyEnabled: true, recurringQuarterlyAmount: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2.5 text-base font-semibold font-mono bg-white" placeholder="1000" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">First Quarter Trigger</label>
+                        <select value={prepayment.recurringQuarterlyStartMonth || 3} onChange={(e) => onChange({ ...prepayment, recurringQuarterlyStartMonth: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white font-mono">
+                          <option value={3}>Month 3 (Q1 End: 3, 6, 9, 12...)</option>
+                          <option value={1}>Month 1 (Immediate: 1, 4, 7, 10...)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeSegment === 'half-yearly' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                        <input type="checkbox" checked={prepayment.recurringHalfYearlyEnabled} onChange={(e) => onChange({ ...prepayment, recurringHalfYearlyEnabled: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded" />
+                        Half-Yearly Prepayment (Every 6 Months)
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Half-Yearly Amount</label>
+                        <div className="relative rounded-lg shadow-xs">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">{currencySymbol}</span>
+                          <input type="number" step="1000" value={prepayment.recurringHalfYearlyAmount || ''} onChange={(e) => onChange({ ...prepayment, recurringHalfYearlyEnabled: true, recurringHalfYearlyAmount: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2.5 text-base font-semibold font-mono bg-white" placeholder="2500" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">First Half-Year Trigger</label>
+                        <select value={prepayment.recurringHalfYearlyStartMonth || 6} onChange={(e) => onChange({ ...prepayment, recurringHalfYearlyStartMonth: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white font-mono">
+                          <option value={6}>Month 6 (Mid-Year: 6, 12, 18, 24...)</option>
+                          <option value={12}>Month 12 (Year 1 End: 12, 18, 24...)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeSegment === 'yearly' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                        <input type="checkbox" checked={prepayment.recurringYearlyEnabled} onChange={(e) => onChange({ ...prepayment, recurringYearlyEnabled: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded" />
+                        Yearly Prepayment (Every 12 Months)
+                      </label>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1.5">Annual Amount</label>
+                      <div className="relative rounded-lg shadow-xs">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">{currencySymbol}</span>
+                        <input type="number" step="2000" value={prepayment.recurringYearlyAmount || ''} onChange={(e) => onChange({ ...prepayment, recurringYearlyEnabled: true, recurringYearlyAmount: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2.5 text-base font-semibold font-mono bg-white" placeholder="5000" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeSegment === 'one-time' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-900 cursor-pointer">
+                        <input type="checkbox" checked={prepayment.oneTimeEnabled} onChange={(e) => onChange({ ...prepayment, oneTimeEnabled: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded" />
+                        One-Time Lump Sum Prepayment
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Lump Sum Amount</label>
+                        <div className="relative rounded-lg shadow-xs">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">{currencySymbol}</span>
+                          <input type="number" step="5000" value={prepayment.oneTimeAmount || ''} onChange={(e) => onChange({ ...prepayment, oneTimeEnabled: true, oneTimeAmount: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 pl-8 pr-3 py-2.5 text-base font-semibold font-mono bg-white" placeholder="10000" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Apply in Month</label>
+                        <select value={prepayment.oneTimeMonth || 12} onChange={(e) => onChange({ ...prepayment, oneTimeMonth: Number(e.target.value) })} className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white font-mono">
+                          {Array.from({ length: Math.min(60, totalLoanMonths) }, (_, i) => i + 1).map((m) => (
+                            <option key={m} value={m}>Month {m} ({formatMonthYear(addMonths(startDate, m - 1))})</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeSegment === 'custom' && (
+                  <div className="text-center py-4">
+                    <p className="text-xs text-slate-500">Configure recurring prepayments above or manage specific milestones in your loan journey.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl bg-emerald-50/90 border border-emerald-200/90 p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <Icon name="sparkles" className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-emerald-950">Prepayment Impact Calculated</div>
+                      <p className="text-xs text-emerald-800 mt-0.5">
+                        Save <strong className="font-bold underline">{formatCurrency(interestSaved, currency)}</strong> in interest and become debt-free{' '}
+                        <strong>{Math.floor(timeSavedMonths / 12)} years {timeSavedMonths % 12} months earlier!</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right bg-white/90 px-3 py-1.5 rounded-lg border border-emerald-200 text-xs">
+                    <span className="text-[10px] text-slate-500 block">NEW PAYOFF DATE</span>
+                    <span className="font-bold font-mono text-emerald-700">{newPayoffDate}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- Results Summary Component ---
+    function ResultsSummary({ summary, currency, prepayment, principal }) {
+      const isPrepayActive = prepayment.enabled && (summary.interestSaved > 0 || summary.timeSavedMonths > 0);
+      const totalOutlay = isPrepayActive ? summary.revisedTotalPayment : summary.originalTotalPayment;
+      const totalInterest = isPrepayActive ? summary.revisedTotalInterest : summary.originalTotalInterest;
+      const principalPercent = totalOutlay > 0 ? (principal / totalOutlay) * 100 : 0;
+      const interestPercent = totalOutlay > 0 ? (totalInterest / totalOutlay) * 100 : 0;
+      const radius = 54;
+      const circumference = 2 * Math.PI * radius;
+      const principalStroke = (principalPercent / 100) * circumference;
+      const interestStroke = (interestPercent / 100) * circumference;
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm transition-all">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Financial Outcome</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Calculated monthly installments and interest savings</p>
+            </div>
+            {isPrepayActive && (
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">Savings Applied</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-4 sm:pt-5">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+              <span className="text-xs text-slate-500 font-medium block mb-1">Monthly EMI</span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
+                {formatCurrency(isPrepayActive && prepayment.strategy === 'reduce-emi' ? summary.withPrepaymentEmi : summary.originalMonthlyEmi, currency)}
+              </div>
+              {isPrepayActive && prepayment.strategy === 'reduce-emi' ? (
+                <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-emerald-700">
+                  <Icon name="arrow-down-right" className="w-3.5 h-3.5" />
+                  <span>Reduced from {formatCurrency(summary.originalMonthlyEmi, currency)}/mo</span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 mt-2">Standard equated installment</p>
+              )}
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+              <span className="text-xs text-slate-500 font-medium block mb-1">Total Interest ({interestPercent.toFixed(1)}%)</span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-indigo-950 font-mono tabular-nums">
+                {formatCurrency(totalInterest, currency)}
+              </div>
+              {isPrepayActive && (
+                <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-emerald-700">
+                  <Icon name="trending-down" className="w-3.5 h-3.5" />
+                  <span>Down from {formatCurrency(summary.originalTotalInterest, currency)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 sm:col-span-2 lg:col-span-1">
+              <span className="text-xs text-slate-500 font-medium block mb-1">Total Outlay</span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
+                {formatCurrency(totalOutlay, currency)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-600">
+                <Icon name="calendar" className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Payoff: <strong>{isPrepayActive ? summary.revisedPayoffDate : summary.originalPayoffDate}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {isPrepayActive && (
+            <div className="mt-5 rounded-xl bg-emerald-500/10 border border-emerald-300/80 p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 block">Prepayment Savings</span>
+                  <div className="text-xl sm:text-2xl font-black text-emerald-950 font-mono">{formatCurrency(summary.interestSaved, currency)} Saved</div>
+                </div>
+                <div className="bg-white/90 px-4 py-2.5 rounded-lg border border-emerald-200 text-xs">
+                  <span className="text-[10px] uppercase text-slate-500 block">Term Shortened</span>
+                  <span className="font-extrabold text-emerald-900 font-mono text-base">{summary.timeSavedYears} Yrs {summary.remainingMonthsPart} Mos</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col md:flex-row items-center gap-5">
+            <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={radius} className="stroke-slate-200" strokeWidth="14" fill="transparent" />
+                <circle cx="70" cy="70" r={radius} className="stroke-indigo-600" strokeWidth="14" strokeDasharray={`${principalStroke} ${circumference}`} strokeLinecap="round" fill="transparent" />
+                <circle cx="70" cy="70" r={radius} className="stroke-amber-500" strokeWidth="14" strokeDasharray={`${interestStroke} ${circumference}`} strokeDashoffset={-principalStroke} strokeLinecap="round" fill="transparent" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-[10px] uppercase font-bold text-slate-500">Principal</span>
+                <span className="text-xs font-bold text-slate-800 font-mono">{principalPercent.toFixed(0)}%</span>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full space-y-2 text-xs">
+              <div className="flex justify-between font-medium"><span>Principal Loan:</span><span className="font-bold font-mono">{formatCurrency(principal, currency)} ({principalPercent.toFixed(1)}%)</span></div>
+              <div className="flex justify-between font-medium"><span>Interest Expense:</span><span className="font-bold font-mono">{formatCurrency(totalInterest, currency)} ({interestPercent.toFixed(1)}%)</span></div>
+              <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden flex mt-2">
+                <div style={{ width: `${principalPercent}%` }} className="bg-indigo-600 h-full" />
+                <div style={{ width: `${interestPercent}%` }} className="bg-amber-500 h-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Interactive Touch & Mouse Payoff Trajectory Chart ---
+    function PayoffChart({ originalSchedule, prepaymentSchedule, currency, isPrepayActive, principal }) {
+      const [hoverIdx, setHoverIdx] = useState(null);
+      const containerRef = useRef(null);
+      if (!originalSchedule || originalSchedule.length === 0) return null;
+
+      const width = 800;
+      const height = 300;
+      const padding = { top: 20, right: 25, bottom: 40, left: 65 };
+      const innerWidth = width - padding.left - padding.right;
+      const innerHeight = height - padding.top - padding.bottom;
+      const maxMonths = originalSchedule.length;
+
+      const getX = (m) => padding.left + (m / maxMonths) * innerWidth;
+      const getY = (b) => padding.top + innerHeight - (Math.max(0, b) / principal) * innerHeight;
+
+      const makePath = (sched) => sched.reduce((acc, r, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${getX(r.monthIndex)} ${getY(r.closingBalance)}`, `M ${getX(0)} ${getY(principal)}`);
+
+      const handleMove = (clientX, target) => {
+        const rect = target.getBoundingClientRect();
+        const svgX = ((clientX - rect.left) / rect.width) * width;
+        if (svgX < padding.left || svgX > width - padding.right) return setHoverIdx(null);
+        setHoverIdx(Math.max(1, Math.min(maxMonths, Math.round(((svgX - padding.left) / innerWidth) * maxMonths))));
+      };
+
+      const origRow = hoverIdx ? originalSchedule[Math.min(hoverIdx - 1, originalSchedule.length - 1)] : null;
+      const prepayRow = hoverIdx ? prepaymentSchedule[Math.min(hoverIdx - 1, prepaymentSchedule.length - 1)] : null;
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm transition-all">
+          <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Balance Payoff Trajectory</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Scheduled loan vs early prepayment payoff curves</p>
+            </div>
+            <div className="flex gap-3 text-xs">
+              <span className="text-slate-500">--- Scheduled</span>
+              {isPrepayActive && <span className="text-emerald-700 font-semibold">— Prepayment</span>}
+            </div>
+          </div>
+
+          <div ref={containerRef} className="relative mt-4 overflow-hidden">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="w-full h-auto select-none touch-none"
+              onMouseMove={(e) => handleMove(e.clientX, e.currentTarget)}
+              onMouseLeave={() => setHoverIdx(null)}
+              onTouchMove={(e) => e.touches.length > 0 && handleMove(e.touches[0].clientX, e.currentTarget)}
+              onTouchEnd={() => setHoverIdx(null)}
+            >
+              {[0, 0.5, 1].map((pct, i) => (
+                <g key={i}>
+                  <line x1={padding.left} y1={getY(principal * pct)} x2={width - padding.right} y2={getY(principal * pct)} stroke="#f1f5f9" strokeWidth="1" />
+                  <text x={padding.left - 10} y={getY(principal * pct) + 4} textAnchor="end" className="text-[10px] fill-slate-500 font-mono">{formatCompactNumber(principal * pct, currency)}</text>
+                </g>
+              ))}
+
+              <path d={makePath(originalSchedule)} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray={isPrepayActive ? '4 4' : 'none'} />
+              {isPrepayActive && <path d={makePath(prepaymentSchedule)} fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" />}
+
+              {hoverIdx && (
+                <g>
+                  <line x1={getX(hoverIdx)} y1={padding.top} x2={getX(hoverIdx)} y2={padding.top + innerHeight} stroke="#6366f1" strokeWidth="1" strokeDasharray="3 3" />
+                  {origRow && <circle cx={getX(hoverIdx)} cy={getY(origRow.closingBalance)} r="4" fill="#94a3b8" />}
+                  {isPrepayActive && prepayRow && <circle cx={getX(hoverIdx)} cy={getY(prepayRow.closingBalance)} r="5" fill="#059669" />}
+                </g>
+              )}
+            </svg>
+
+            {hoverIdx && origRow && (
+              <div className="mt-3 p-3 rounded-lg bg-slate-900 text-white text-xs font-mono flex flex-wrap justify-between gap-2">
+                <span>Month {hoverIdx} ({origRow.dateStr})</span>
+                <span>Scheduled: <strong>{formatCurrency(origRow.closingBalance, currency)}</strong></span>
+                {isPrepayActive && prepayRow && <span className="text-emerald-400">With Prepay: <strong>{formatCurrency(prepayRow.closingBalance, currency)}</strong></span>}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- Amortization Schedule Component ---
+    function AmortizationSchedule({ yearlySchedule, fullSchedule, currency, isPrepayActive }) {
+      const [viewMode, setViewMode] = useState('yearly');
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Amortization Schedule</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{fullSchedule.length} Payments Total</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex p-1 bg-slate-100 rounded-lg border border-slate-200">
+                <button onClick={() => setViewMode('yearly')} className={`px-3 py-1.5 text-xs font-semibold rounded-md ${viewMode === 'yearly' ? 'bg-white shadow-xs' : 'text-slate-600'}`}>Yearly</button>
+                <button onClick={() => setViewMode('monthly')} className={`px-3 py-1.5 text-xs font-semibold rounded-md ${viewMode === 'monthly' ? 'bg-white shadow-xs' : 'text-slate-600'}`}>All Months</button>
+              </div>
+              <button onClick={() => exportScheduleToCsv(fullSchedule)} className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1">
+                <Icon name="download" className="w-3.5 h-3.5" /> CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+              <thead>
+                <tr className="bg-slate-50 text-slate-600 font-semibold uppercase text-[11px] border-b border-slate-200">
+                  <th className="py-2.5 px-3">Year / Month</th>
+                  <th className="py-2.5 px-3 text-right">Opening Bal.</th>
+                  <th className="py-2.5 px-3 text-right">Principal</th>
+                  <th className="py-2.5 px-3 text-right">Interest</th>
+                  {isPrepayActive && <th className="py-2.5 px-3 text-right text-emerald-700">Prepayment</th>}
+                  <th className="py-2.5 px-3 text-right">Total Paid</th>
+                  <th className="py-2.5 px-3 text-right">Closing Bal.</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {viewMode === 'yearly' ? yearlySchedule.map((yr) => (
+                  <tr key={yr.yearIndex} className="hover:bg-slate-50 font-medium">
+                    <td className="py-2.5 px-3 font-bold text-slate-900">Year {yr.yearIndex} ({yr.calendarYear})</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{formatCurrency(yr.openingBalance, currency)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-indigo-700">{formatCurrency(yr.principalPaid, currency)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-amber-700">{formatCurrency(yr.interestPaid, currency)}</td>
+                    {isPrepayActive && <td className="py-2.5 px-3 text-right font-mono text-emerald-700">{yr.extraPrepayment > 0 ? formatCurrency(yr.extraPrepayment, currency) : '—'}</td>}
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(yr.totalPayment, currency)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{formatCurrency(yr.closingBalance, currency)}</td>
+                  </tr>
+                )) : fullSchedule.map((m) => (
+                  <tr key={m.monthIndex} className="hover:bg-slate-50">
+                    <td className="py-2 px-3 font-mono font-medium text-slate-800">Mo. {m.monthIndex} ({m.dateStr})</td>
+                    <td className="py-2 px-3 text-right font-mono">{formatCurrency(m.openingBalance, currency)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-indigo-700">{formatCurrency(m.principal, currency)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-amber-700">{formatCurrency(m.interest, currency)}</td>
+                    {isPrepayActive && <td className="py-2 px-3 text-right font-mono text-emerald-700">{m.extraPrepayment > 0 ? formatCurrency(m.extraPrepayment, currency) : '—'}</td>}
+                    <td className="py-2 px-3 text-right font-mono font-bold">{formatCurrency(m.totalPayment, currency)}</td>
+                    <td className="py-2 px-3 text-right font-mono">{formatCurrency(m.closingBalance, currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Rate Sensitivity Component ---
+    function RateSensitivity({ input, currency }) {
+      const items = calculateRateSensitivity(input.principal, input.annualRate, input.tenureYears * 12 + input.tenureMonths);
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight pb-3 border-b border-slate-100">Floating Rate Stress Test</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+              <thead>
+                <tr className="bg-slate-50 text-slate-600 font-semibold uppercase text-[11px] border-b border-slate-200">
+                  <th className="py-2.5 px-3">Rate Shift</th>
+                  <th className="py-2.5 px-3">Effective Rate</th>
+                  <th className="py-2.5 px-3 text-right">Monthly EMI</th>
+                  <th className="py-2.5 px-3 text-right">Monthly Difference</th>
+                  <th className="py-2.5 px-3 text-right">Total Outlay</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {items.map((row) => (
+                  <tr key={row.rateDelta} className={`font-mono ${row.rateDelta === 0 ? 'bg-indigo-50 font-bold' : 'hover:bg-slate-50'}`}>
+                    <td className="py-2.5 px-3">{row.rateDelta === 0 ? 'Current Rate' : `${row.rateDelta > 0 ? '+' : ''}${row.rateDelta.toFixed(1)}%`}</td>
+                    <td className="py-2.5 px-3 font-bold">{row.rate.toFixed(2)}%</td>
+                    <td className="py-2.5 px-3 text-right font-bold">{formatCurrency(row.monthlyEmi, currency)}</td>
+                    <td className="py-2.5 px-3 text-right">{row.rateDelta === 0 ? 'Baseline' : `${row.rateDelta > 0 ? '+' : ''}${formatCurrency(row.emiDifference, currency)}`}</td>
+                    <td className="py-2.5 px-3 text-right">{formatCurrency(row.totalPayment, currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Loan Comparison Component ---
+    function LoanComparisonView({ currentInput, currentPrepayment, currency }) {
+      const [offers] = useState([
+        { id: '1', name: 'Current Plan (With Prepayment)', principal: currentInput.principal, rate: currentInput.annualRate, years: currentInput.tenureYears, prepayMonthly: currentPrepayment.enabled && currentPrepayment.recurringMonthlyEnabled ? currentPrepayment.recurringMonthlyAmount : 0 },
+        { id: '2', name: 'Shorter 15Y Term', principal: currentInput.principal, rate: Math.max(0.5, currentInput.annualRate - 0.5), years: 15, prepayMonthly: 0 },
+        { id: '3', name: 'Aggressive Prepay Plan', principal: currentInput.principal, rate: currentInput.annualRate, years: currentInput.tenureYears, prepayMonthly: currency === 'INR' ? 10000 : 350 },
+      ]);
+
+      return (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight pb-3 border-b border-slate-100">Loan Comparison Matrix</h2>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {offers.map((offer) => {
+              const res = computeLoanAmortization(
+                { principal: offer.principal, annualRate: offer.rate, tenureYears: offer.years, tenureMonths: 0, startDate: currentInput.startDate, loanType: 'custom' },
+                { enabled: offer.prepayMonthly > 0, strategy: 'reduce-tenure', recurringMonthlyEnabled: offer.prepayMonthly > 0, recurringMonthlyAmount: offer.prepayMonthly }
+              );
+              return (
+                <div key={offer.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2 text-xs">
+                  <h3 className="font-bold text-sm text-slate-900">{offer.name}</h3>
+                  <div className="flex justify-between"><span>Principal:</span><span className="font-bold font-mono">{formatCurrency(offer.principal, currency)}</span></div>
+                  <div className="flex justify-between"><span>Rate:</span><span className="font-bold font-mono">{offer.rate}%</span></div>
+                  <div className="flex justify-between"><span>Tenure:</span><span className="font-bold font-mono">{offer.years} Years</span></div>
+                  <div className="flex justify-between pt-2 border-t border-slate-200"><span>Monthly EMI:</span><span className="font-bold font-mono text-sm">{formatCurrency(res.summary.originalMonthlyEmi, currency)}</span></div>
+                  <div className="flex justify-between"><span>Total Interest:</span><span className="font-bold font-mono text-emerald-700">{formatCurrency(res.summary.revisedTotalInterest, currency)}</span></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // --- Main App ---
+    function App() {
+      const [currency, setCurrency] = useState('INR');
+      const [activeTab, setActiveTab] = useState('calculator');
+      const [loanInput, setLoanInput] = useState({
+        principal: 2500000,
+        annualRate: 8.5,
+        tenureYears: 20,
+        tenureMonths: 0,
+        startDate: new Date().toISOString().slice(0, 7),
+        loanType: 'home',
+      });
+
+      const [prepayment, setPrepayment] = useState({
+        enabled: true,
+        strategy: 'reduce-tenure',
+        activeFrequency: 'monthly',
+        recurringMonthlyEnabled: true,
+        recurringMonthlyAmount: 2500,
+        recurringStartMonth: 1,
+        recurringQuarterlyEnabled: false,
+        recurringQuarterlyAmount: 10000,
+        recurringQuarterlyStartMonth: 3,
+        recurringHalfYearlyEnabled: false,
+        recurringHalfYearlyAmount: 25000,
+        recurringHalfYearlyStartMonth: 6,
+        recurringYearlyEnabled: false,
+        recurringYearlyAmount: 50000,
+        oneTimeEnabled: false,
+        oneTimeAmount: 100000,
+        oneTimeMonth: 12,
+        customPayments: [],
+      });
+
+      const [savedScenarios, setSavedScenarios] = useState([]);
+      const [drawerOpen, setDrawerOpen] = useState(false);
+
+      useEffect(() => {
+        try {
+          const s = localStorage.getItem('loanskart_standalone_saved');
+          if (s) setSavedScenarios(JSON.parse(s));
+        } catch(e) {}
+      }, []);
+
+      const loanResult = useMemo(() => computeLoanAmortization(loanInput, prepayment), [loanInput, prepayment]);
+      const { summary, originalSchedule, prepaymentSchedule, yearlySchedule } = loanResult;
+
+      const handleSave = () => {
+        const name = prompt('Enter a name for this loan scenario:');
+        if (!name) return;
+        const updated = [{ id: Date.now().toString(), name, input: loanInput, prepayment, summary }, ...savedScenarios];
+        setSavedScenarios(updated);
+        localStorage.setItem('loanskart_standalone_saved', JSON.stringify(updated));
+        alert('Scenario saved!');
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+          <Header
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            currency={currency}
+            setCurrency={setCurrency}
+            savedCount={savedScenarios.length}
+            onOpenSaved={() => setDrawerOpen(true)}
+            onExportCsv={() => exportScheduleToCsv(prepayment.enabled ? prepaymentSchedule : originalSchedule)}
+          />
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8 pb-24 lg:pb-8">
+            {activeTab === 'calculator' && (
+              <div className="space-y-6 sm:space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                  <div className="lg:col-span-7 space-y-6">
+                    <LoanInputSection input={loanInput} onChange={setLoanInput} currency={currency} />
+                    <PrepaymentManager
+                      prepayment={prepayment}
+                      onChange={setPrepayment}
+                      currency={currency}
+                      totalLoanMonths={loanInput.tenureYears * 12 + loanInput.tenureMonths}
+                      startDateStr={loanInput.startDate}
+                      interestSaved={summary.interestSaved}
+                      timeSavedMonths={summary.timeSavedMonths}
+                      newPayoffDate={summary.revisedPayoffDate}
+                      originalPayoffDate={summary.originalPayoffDate}
+                      totalPrepaymentMade={summary.totalPrepaymentMade}
+                    />
+                  </div>
+
+                  <div id="results-section" className="lg:col-span-5 space-y-6 lg:sticky lg:top-20">
+                    <ResultsSummary summary={summary} currency={currency} prepayment={prepayment} principal={loanInput.principal} />
+                    <PayoffChart originalSchedule={originalSchedule} prepaymentSchedule={prepaymentSchedule} currency={currency} isPrepayActive={prepayment.enabled && summary.interestSaved > 0} principal={loanInput.principal} />
+                  </div>
+                </div>
+
+                <AmortizationSchedule yearlySchedule={yearlySchedule} fullSchedule={prepayment.enabled ? prepaymentSchedule : originalSchedule} currency={currency} isPrepayActive={prepayment.enabled && summary.interestSaved > 0} />
+              </div>
+            )}
+
+            {activeTab === 'amortization' && (
+              <div className="space-y-6">
+                <ResultsSummary summary={summary} currency={currency} prepayment={prepayment} principal={loanInput.principal} />
+                <AmortizationSchedule yearlySchedule={yearlySchedule} fullSchedule={prepayment.enabled ? prepaymentSchedule : originalSchedule} currency={currency} isPrepayActive={prepayment.enabled && summary.interestSaved > 0} />
+              </div>
+            )}
+
+            {activeTab === 'sensitivity' && <RateSensitivity input={loanInput} currency={currency} />}
+            {activeTab === 'compare' && <LoanComparisonView currentInput={loanInput} currentPrepayment={prepayment} currency={currency} />}
+          </main>
+
+          {/* Mobile Bottom Quick Floating Bar */}
+          {activeTab === 'calculator' && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2.5 shadow-lg flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Monthly EMI</span>
+                <span className="font-extrabold font-mono text-slate-900 text-sm">{formatCurrency(prepayment.enabled && prepayment.strategy === 'reduce-emi' ? summary.withPrepaymentEmi : summary.originalMonthlyEmi, currency)}</span>
+              </div>
+              {summary.interestSaved > 0 && (
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Saved</span>
+                  <span className="font-extrabold font-mono text-emerald-700 text-sm">{formatCurrency(summary.interestSaved, currency)}</span>
+                </div>
+              )}
+              <button onClick={() => { const el = document.getElementById('results-section'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }} className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg">View Details</button>
+            </div>
+          )}
+
+          {/* Drawer for Saved Scenarios */}
+          {drawerOpen && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              <div className="fixed inset-0 bg-slate-900/30" onClick={() => setDrawerOpen(false)} />
+              <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10 p-5 overflow-y-auto">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+                  <h3 className="font-bold text-slate-900">Saved Scenarios</h3>
+                  <button onClick={() => setDrawerOpen(false)} className="text-slate-400 hover:text-slate-600"><Icon name="close" className="w-5 h-5" /></button>
+                </div>
+                <button onClick={handleSave} className="mt-4 w-full py-2 px-3 text-xs font-semibold text-white bg-indigo-600 rounded-lg">+ Save Current Calculation</button>
+                <div className="mt-4 space-y-3">
+                  {savedScenarios.length === 0 ? <p className="text-xs text-slate-400 text-center py-6">No saved plans yet.</p> : savedScenarios.map((sc) => (
+                    <div key={sc.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1 text-xs">
+                      <div className="font-bold text-slate-900">{sc.name}</div>
+                      <div>Amount: {formatCurrency(sc.input.principal, currency)} · {sc.input.annualRate}%</div>
+                      <button onClick={() => { setLoanInput(sc.input); setPrepayment(sc.prepayment); setDrawerOpen(false); }} className="mt-2 text-xs font-semibold text-indigo-600 underline">Load Plan</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <footer className="border-t border-slate-200 bg-white py-6 text-xs text-slate-500 text-center">
+            <strong>Loanskart</strong> · Smart EMI & Prepayment Calculator · For estimation and financial planning purposes only.
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
 </html>
-
-
-
